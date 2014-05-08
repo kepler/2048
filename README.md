@@ -9,7 +9,7 @@ Cirulli](http://gabrielecirulli.com/), itself based on [1024 by Veewo
 Studio](https://itunes.apple.com/us/app/1024!/id823499224) conceptually similar
 to [Threes by Asher Vollmer.](http://asherv.com/threes/).
 
-This implementation use only Kivy framework, and can be played on mobile with
+This implementation use only [Kivy framework](http://kivy.org/), and can be played on mobile with
 swipes or desktop with keyboard.
 
 ![Screenshot](/screenshot.png)

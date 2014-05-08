@@ -12,7 +12,7 @@ from kivy.utils import get_color_from_hex
 from kivy.core.window import Window
 from kivy.utils import platform
 from kivy.factory import Factory
-from random import choice, random
+from random import choice, random, randrange
 
 platform = platform()
 app = None
@@ -53,7 +53,7 @@ else:
 
 
 class ButtonBehavior(object):
-    # XXX this is a port of the Kivy 1.8.0 version, the current android versino
+    # XXX this is a port of the Kivy 1.8.0 version, the current android version
     # still use 1.7.2. This is going to be removed soon.
     state = OptionProperty('normal', options=('normal', 'down'))
     last_touch = ObjectProperty(None)
@@ -479,7 +479,35 @@ class Game2048App(App):
 
     def _on_keyboard_settings(self, *args):
         return
+        
+    #**************************************************************************
+    # Executa uma jogada
+    def ai_move(self):
+        move = randrange(1,4+1)
+        if move == 1:
+            self.root.ids.game.move_topdown(True)
+        elif move == 2:
+            self.root.ids.game.move_topdown(False)
+        elif move == 3:
+            self.root.ids.game.move_leftright(False)
+        elif move == 4:
+            self.root.ids.game.move_leftright(True)
+
+    # Comeca a jogar continuamente ou, se ja estiver jogando, para de jogar
+    def ai_play(self, button):
+        #print('button state is: {state}'.format(state=button.state))
+        #print('button text is: {text}'.format(text=button.text))
+        if button.state == 'down':
+            button.text = 'Parar'
+        else:
+            button.text = 'Jogar'
+        self.ai_move()
+
+    #**************************************************************************
 
 if __name__ == '__main__':
     Factory.register('ButtonBehavior', cls=ButtonBehavior)
     Game2048App().run()
+    
+    
+

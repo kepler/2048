@@ -68,11 +68,11 @@ BoxLayout:
 
 	BoxLayout:
 		orientation: 'vertical' if root.height > root.width else 'horizontal'
-		size_hint_y: .25 if root.height > root.width else 1
+		size_hint_y: .15 if root.height > root.width else 1
 
 		BoxLayout:
 			spacing: '10dp'
-			padding: '5dp'
+			padding: '10dp'
 			orientation: 'vertical' if root.height < root.width else 'horizontal'
 
 			Label:
@@ -84,6 +84,30 @@ BoxLayout:
 			BoxLayout:
 				orientation: 'vertical'
 				spacing: '10dp'
+				
+				BoxLayout:
+					orientation: 'vertical'
+					size_hint_y: .35
+					
+					#Label:
+						#text: 'Ações automáticas'
+						#font_size: self.height / 1.5
+						#color: 0x77 / 255., 0x6e / 255., 0x65 / 255., 1.
+						#bold: True
+						
+					BoxLayout:
+						orientation: 'horizontal'
+						spacing: '10dp'
+						padding: '10dp'
+						
+						TextButton:
+							text: 'Mover'
+							on_press: app.ai_move()
+
+						ToggleButton:
+							id: play_but
+							text: 'Jogar' #play_but.state
+							on_press: app.ai_play(play_but)
 
 				BoxLayout:
 					orientation: 'vertical'
