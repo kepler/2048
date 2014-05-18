@@ -1,5 +1,7 @@
 __version__ = '1.3.0'
 
+from random import choice, random, randrange
+
 from kivy.app import App
 from kivy.uix.widget import Widget
 from kivy.properties import NumericProperty, OptionProperty, ObjectProperty
@@ -12,7 +14,7 @@ from kivy.utils import get_color_from_hex
 from kivy.core.window import Window
 from kivy.utils import platform
 from kivy.factory import Factory
-from random import choice, random, randrange
+
 
 platform = platform()
 app = None
@@ -20,6 +22,7 @@ app = None
 if platform == 'android':
     # Support for Google Play
     import gs_android
+
     leaderboard_highscore = 'CgkI0InGg4IYEAIQBg'
     achievement_block_32 = 'CgkI0InGg4IYEAIQCg'
     achievement_block_64 = 'CgkI0InGg4IYEAIQCQ'
@@ -40,23 +43,26 @@ if platform == 'android':
         128: achievement_block_128,
         256: achievement_block_256,
         512: achievement_block_512,
-        1024: achievement_block_1024, 
+        1024: achievement_block_1024,
         2048: achievement_block_2048,
         4096: achievement_block_4096}
 
     from kivy.uix.popup import Popup
+
     class GooglePlayPopup(Popup):
         pass
 
 else:
     achievements = {}
 
+tempo = .05
 
 class ButtonBehavior(object):
     # XXX this is a port of the Kivy 1.8.0 version, the current android version
     # still use 1.7.2. This is going to be removed soon.
     state = OptionProperty('normal', options=('normal', 'down'))
     last_touch = ObjectProperty(None)
+
     def __init__(self, **kwargs):
         self.register_event_type('on_press')
         self.register_event_type('on_release')
@@ -94,7 +100,7 @@ class ButtonBehavior(object):
     def on_touch_up(self, touch):
         if touch.grab_current is not self:
             return super(ButtonBehavior, self).on_touch_up(touch)
-        assert(self in touch.ud)
+        assert (self in touch.ud)
         touch.ungrab(self)
         self.last_touch = touch
         self._do_release()
@@ -165,7 +171,6 @@ class Number(Widget):
 
 
 class Game2048(Widget):
-
     cube_size = NumericProperty(10)
     cube_padding = NumericProperty(10)
     score = NumericProperty(0)
@@ -195,6 +200,7 @@ class Game2048(Widget):
             self.move_leftright(True)
         elif key == 27 and platform == 'android':
             from jnius import autoclass
+
             PythonActivity = autoclass('org.renpy.android.PythonActivity')
             PythonActivity.mActivity.moveTaskToBack(True)
             return True
@@ -209,7 +215,7 @@ class Game2048(Widget):
             csize = self.cube_size, self.cube_size
             for ix, iy in self.iterate_pos():
                 BorderImage(pos=self.index_to_pos(ix, iy), size=csize,
-                source='data/round.png')
+                            source='data/round.png')
 
 
     def reposition(self, *args):
@@ -259,9 +265,9 @@ class Game2048(Widget):
 
     def spawn_number_at(self, ix, iy, value):
         number = Number(
-                size=(self.cube_size, self.cube_size),
-                pos=self.index_to_pos(ix, iy),
-                number=value)
+            size=(self.cube_size, self.cube_size),
+            pos=self.index_to_pos(ix, iy),
+            number=value)
         self.grid[ix][iy] = number
         self.add_widget(number)
 
@@ -307,7 +313,7 @@ class Game2048(Widget):
                     cube.move_to(pos)
 
         if not self.check_end() and moved:
-            Clock.schedule_once(self.spawn_number, .20)
+            Clock.schedule_once(self.spawn_number, tempo)
 
     def move_topdown(self, top):
         r = range(3, -1, -1) if top else range(4)
@@ -338,7 +344,7 @@ class Game2048(Widget):
                     cube.move_to(pos)
 
         if not self.check_end() and moved:
-            Clock.schedule_once(self.spawn_number, .20)
+            Clock.schedule_once(self.spawn_number, tempo)
 
     def combine(self, cubes):
         if len(cubes) <= 1:
@@ -412,6 +418,7 @@ class Game2048(Widget):
 
 class Game2048App(App):
     use_kivy_settings = False
+    ai_api = None
 
     def build_config(self, config):
         if platform == 'android':
@@ -431,6 +438,8 @@ class Game2048App(App):
             # remove all the leaderboard and achievement buttons
             scoring = self.root.ids.scoring
             scoring.parent.remove_widget(scoring)
+
+        self.ai_api = Game2048AI(self.root.ids.game)
 
     def gs_increment(self, uid):
         if platform == 'android' and self.use_google_play:
@@ -479,19 +488,17 @@ class Game2048App(App):
 
     def _on_keyboard_settings(self, *args):
         return
-        
+
     #**************************************************************************
     # Executa uma jogada
     def ai_move(self):
-        move = randrange(1,4+1)
-        if move == 1:
-            self.root.ids.game.move_topdown(True)
-        elif move == 2:
-            self.root.ids.game.move_topdown(False)
-        elif move == 3:
-            self.root.ids.game.move_leftright(False)
-        elif move == 4:
-            self.root.ids.game.move_leftright(True)
+        #print(self.ai_api.grid())
+        if not self.ai_api.available_actions:
+            Clock.unschedule(self.ai_keep_playing)
+            return False
+        action = choice(self.ai_api.available_actions)
+        # print(action)
+        self.ai_api.execute(action)
 
     # Comeca a jogar continuamente ou, se ja estiver jogando, para de jogar
     def ai_play(self, button):
@@ -499,15 +506,104 @@ class Game2048App(App):
         #print('button text is: {text}'.format(text=button.text))
         if button.state == 'down':
             button.text = 'Parar'
+            # self.ai_move()
+            Clock.schedule_interval(self.ai_keep_playing, tempo)
         else:
             button.text = 'Jogar'
+            Clock.unschedule(self.ai_keep_playing)
+
+    def ai_keep_playing(self, dt):
         self.ai_move()
 
     #**************************************************************************
 
+
+#**************************************************************************
+class Actions:
+    # up, down, left, right = range(4)
+    up, down, left, right = ("UP", "DOWN", "LEFT", "RIGHT")
+
+
+class Game2048AI:
+    game_app = None
+
+    def __init__(self, game_app):
+        self.game_app = game_app
+
+    def grid(self):
+        grid = []
+        for iy in range(4):
+            row = []
+            for ix in range(4):
+                row.append(self.grid_at(ix, iy))
+            grid.append(row)
+        return grid
+
+    def grid_at(self, x, y):
+        cube = self.game_app.grid[x][y]
+        if cube:
+            return cube.number
+        else:
+            return 0
+
+    def iterate_grid(self):
+        for iy, row in enumerate(self.grid()):
+            for ix, value in enumerate(row):
+                yield ix, iy, value
+
+    @property
+    def available_actions(self):
+        available = set()
+        for ix, iy, value in self.iterate_grid():
+            if len(available) == 4:  # all actions already available
+                break
+            if value == 0:  # empty position
+                try:
+                    if self.grid_at(ix + 1, iy) != 0:  # look at right block
+                        available.add(Actions.left)
+                except IndexError:
+                    pass
+                try:
+                    if self.grid_at(ix, iy + 1) != 0:  # look at block above
+                        available.add(Actions.down)
+                except IndexError:
+                    pass
+            else:  # position with a number
+                try:
+                    # look at right block
+                    right_value = self.grid_at(ix + 1, iy)
+                    if right_value == 0:
+                        available.add(Actions.right)
+                    if value == right_value:
+                        available.add(Actions.right)
+                        available.add(Actions.left)
+                except IndexError:
+                    pass
+                try:
+                    # look at block above
+                    above_value = self.grid_at(ix, iy + 1)
+                    if above_value == 0:
+                        available.add(Actions.up)
+                    if value == above_value:
+                        available.add(Actions.up)
+                        available.add(Actions.down)
+                except IndexError:
+                    pass
+        return list(available)
+
+    def execute(self, action):
+        if action == Actions.up:
+            self.game_app.move_topdown(True)
+        elif action == Actions.down:
+            self.game_app.move_topdown(False)
+        elif action == Actions.right:
+            self.game_app.move_leftright(True)
+        elif action == Actions.left:
+            self.game_app.move_leftright(False)
+
+
+#**************************************************************************
+
 if __name__ == '__main__':
     Factory.register('ButtonBehavior', cls=ButtonBehavior)
     Game2048App().run()
-    
-    
-
