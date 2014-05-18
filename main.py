@@ -1,3 +1,5 @@
+from functools import partial
+
 __version__ = '1.3.0'
 
 from random import choice, random, randrange
@@ -55,7 +57,12 @@ if platform == 'android':
 else:
     achievements = {}
 
-tempo = .05
+from kivy.uix.popup import Popup
+
+class AITempoPopup(Popup):
+    pass
+
+tempo = .2
 
 class ButtonBehavior(object):
     # XXX this is a port of the Kivy 1.8.0 version, the current android version
@@ -440,6 +447,7 @@ class Game2048App(App):
             scoring.parent.remove_widget(scoring)
 
         self.ai_api = Game2048AI(self.root.ids.game)
+        self.root.ids.tempo_controls.opacity = 0
 
     def gs_increment(self, uid):
         if platform == 'android' and self.use_google_play:
@@ -494,11 +502,12 @@ class Game2048App(App):
     def ai_move(self):
         #print(self.ai_api.grid())
         if not self.ai_api.available_actions:
-            Clock.unschedule(self.ai_keep_playing)
+            self.ai_api.execute(Actions.up) # just to make the game end
             return False
         action = choice(self.ai_api.available_actions)
         # print(action)
         self.ai_api.execute(action)
+        return True
 
     # Comeca a jogar continuamente ou, se ja estiver jogando, para de jogar
     def ai_play(self, button):
@@ -506,14 +515,43 @@ class Game2048App(App):
         #print('button text is: {text}'.format(text=button.text))
         if button.state == 'down':
             button.text = 'Parar'
-            # self.ai_move()
+            self.ai_play_button = button
+
+            #tempo_controls = self.root.ids.tempo_controls
+            #tempo_controls.parent.add_widget(tempo_controls)
+
+            #end = self.ids.end.__self__
+            #self.remove_widget(end)
+            #self.add_widget(end)
+            #self.ids.end_label.text = text
+            Animation(opacity=1., d=.5).start(self.root.ids.tempo_controls)
+
             Clock.schedule_interval(self.ai_keep_playing, tempo)
         else:
-            button.text = 'Jogar'
-            Clock.unschedule(self.ai_keep_playing)
+            self.ai_stop_playing()
 
     def ai_keep_playing(self, dt):
-        self.ai_move()
+        if not self.ai_move():
+            self.ai_stop_playing()
+            return False # automatically unschedule callback
+
+    def ai_stop_playing(self):
+        self.ai_play_button.state = 'normal'
+        self.ai_play_button.text = 'Jogar'
+        self.root.ids.tempo_controls.opacity = 0
+        Clock.unschedule(self.ai_keep_playing)
+
+    def ai_decrease_tempo(self):
+        global tempo
+        tempo -= .03
+        Clock.unschedule(self.ai_keep_playing)
+        Clock.schedule_interval(self.ai_keep_playing, tempo)
+
+    def ai_increase_tempo(self):
+        global tempo
+        tempo += .03
+        Clock.unschedule(self.ai_keep_playing)
+        Clock.schedule_interval(self.ai_keep_playing, tempo)
 
     #**************************************************************************
 

@@ -26,6 +26,17 @@
 	font_size: '20dp'
 	bold: True
 
+<ToggleButton>:
+	color: 1, 1, 1, 1
+	background_color: 0x77 / 255., 0x6e / 255., 0x65 / 255., 1.
+	background_normal: 'data/round.png'
+	#background_down: 'data/round.png'
+	size_hint_y: None
+	height: '48dp'
+	font_size: '20dp'
+	bold: True
+
+
 <Number>:
 	canvas.before:
 		PushMatrix
@@ -75,39 +86,83 @@ BoxLayout:
 			padding: '10dp'
 			orientation: 'vertical' if root.height < root.width else 'horizontal'
 
-			Label:
-				text: '2048'
-				font_size: min(self.height, self.width) / 2.
-				color: 0x77 / 255., 0x6e / 255., 0x65 / 255., 1.
-				bold: True
+            BoxLayout:
+				orientation: 'vertical'
+				spacing: '10dp'
+
+                Label:
+                    text: '2048'
+                    font_size: min(self.height, self.width) / 2.
+                    color: 0x77 / 255., 0x6e / 255., 0x65 / 255., 1.
+                    #size_hint_y: .5
+                    bold: True
 
 			BoxLayout:
 				orientation: 'vertical'
 				spacing: '10dp'
-				
+
 				BoxLayout:
 					orientation: 'vertical'
-					size_hint_y: .35
-					
-					#Label:
-						#text: 'Ações automáticas'
-						#font_size: self.height / 1.5
-						#color: 0x77 / 255., 0x6e / 255., 0x65 / 255., 1.
-						#bold: True
-						
-					BoxLayout:
-						orientation: 'horizontal'
-						spacing: '10dp'
-						padding: '10dp'
-						
-						TextButton:
-							text: 'Mover'
-							on_press: app.ai_move()
+					size_hint_y: .4
+					canvas.before:
+						#Color:
+						#	rgb: 0xbb / 255., 0xad / 255., 0xa0 / 255.
+						#BorderImage:
+						#	pos: self.pos
+						#	size: self.size
+						#	source: 'data/round.png'
 
-						ToggleButton:
-							id: play_but
-							text: 'Jogar' #play_but.state
-							on_press: app.ai_play(play_but)
+                    Label:
+                        text: 'AI CONTROL'
+                        font_size: self.height / 2
+                        color: 0x77 / 255., 0x6e / 255., 0x65 / 255., 1.
+                        bold: True
+
+                GridLayout:
+                    orientation: 'horizontal'
+                    spacing: '10dp'
+                    padding: ['0dp','10dp'] # horizontal, vertical
+                    pos_hint: {'center_x': .5, 'center_y': .5}
+                    rows: 2
+                    cols: 2
+
+                    TextButton:
+                        pos_hint: {'center_x': .5, 'center_y': .5}
+                        text: 'Mover'
+                        on_press: app.ai_move()
+
+                    ToggleButton:
+                        id: play_but
+                        pos_hint: {'center_x': .5, 'center_y': .5}
+                        text: 'Jogar'
+                        on_press: app.ai_play(play_but)
+
+                    Label:
+
+                    BoxLayout:
+                        id: tempo_controls
+                        anchor_y: 'top'
+                        spacing: '5dp'
+                        #padding: '5dp'
+
+                        TextButton:
+                            pos_hint: {'center_x': .5, 'center_y': .5}
+                            background_color: 0x77 / 255., 0x6e / 255., 0x65 / 255., 1.
+                            text: '-'
+                            font_size: self.height
+                            valign: 'middle'
+                            on_press: app.ai_decrease_tempo() if tempo_controls.opacity == 1. else None
+
+                        TextButton:
+                            pos_hint: {'center_x': .5, 'center_y': .5}
+                            background_color: 0x77 / 255., 0x6e / 255., 0x65 / 255., 1.
+                            text: '+'
+                            font_size: self.height
+                            on_press: app.ai_increase_tempo() if tempo_controls.opacity == 1. else None
+
+			BoxLayout:
+				orientation: 'vertical'
+				spacing: '10dp'
 
 				BoxLayout:
 					orientation: 'vertical'
