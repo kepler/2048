@@ -500,32 +500,14 @@ class Game2048App(App):
     #**************************************************************************
     # Executa uma jogada
     def ai_move(self):
-        #print(self.ai_api.grid())
-        if not self.ai_api.available_actions:
-            self.ai_api.execute(Actions.up) # just to make the game end
-            return False
-        action = choice(self.ai_api.available_actions)
-        # print(action)
-        self.ai_api.execute(action)
-        return True
+        return self.ai_api.make_move()
 
     # Comeca a jogar continuamente ou, se ja estiver jogando, para de jogar
     def ai_play(self, button):
-        #print('button state is: {state}'.format(state=button.state))
-        #print('button text is: {text}'.format(text=button.text))
         if button.state == 'down':
             button.text = 'Parar'
             self.ai_play_button = button
-
-            #tempo_controls = self.root.ids.tempo_controls
-            #tempo_controls.parent.add_widget(tempo_controls)
-
-            #end = self.ids.end.__self__
-            #self.remove_widget(end)
-            #self.add_widget(end)
-            #self.ids.end_label.text = text
             Animation(opacity=1., d=.5).start(self.root.ids.tempo_controls)
-
             Clock.schedule_interval(self.ai_keep_playing, tempo)
         else:
             self.ai_stop_playing()
@@ -568,14 +550,11 @@ class Game2048AI:
     def __init__(self, game_app):
         self.game_app = game_app
 
-    def grid(self):
-        grid = []
-        for iy in range(4):
-            row = []
-            for ix in range(4):
-                row.append(self.grid_at(ix, iy))
-            grid.append(row)
-        return grid
+    @staticmethod
+    def iterate(state):
+        for iy, row in enumerate(state):
+            for ix, value in enumerate(row):
+                yield ix, iy, value
 
     def grid_at(self, x, y):
         cube = self.game_app.grid[x][y]
@@ -584,15 +563,24 @@ class Game2048AI:
         else:
             return 0
 
-    def iterate_grid(self):
-        for iy, row in enumerate(self.grid()):
-            for ix, value in enumerate(row):
-                yield ix, iy, value
+    def current_state(self):
+        grid = []
+        for iy in range(4):
+            row = []
+            for ix in range(4):
+                row.append(self.grid_at(ix, iy))
+            grid.append(row)
+        return grid
 
-    @property
+    def next_state(self, current_state, action):
+        pass # TODO
+
     def available_actions(self):
+        return self.get_actions(self.current_state())
+
+    def get_actions(self, state):
         available = set()
-        for ix, iy, value in self.iterate_grid():
+        for ix, iy, value in self.iterate(state):
             if len(available) == 4:  # all actions already available
                 break
             if value == 0:  # empty position
@@ -629,6 +617,16 @@ class Game2048AI:
                     pass
         return list(available)
 
+    def choose_action(self, state):
+        if not self.get_actions(state):
+            return None
+        print(self.evaluate(eval_highest_block, state))
+        print(self.evaluate(eval_sum_blocks, state))
+        action = choice(self.get_actions(state))
+        return action
+
+
+
     def execute(self, action):
         if action == Actions.up:
             self.game_app.move_topdown(True)
@@ -639,9 +637,27 @@ class Game2048AI:
         elif action == Actions.left:
             self.game_app.move_leftright(False)
 
+    def evaluate(self, eval_func, state):
+        return eval_func(state)
+
+    def make_move(self):
+        state = self.current_state()
+        action = self.choose_action(state)
+        if not action:
+            self.execute(Actions.up) # just to make the game end
+            return False
+        self.execute(action)
+        return True
 
 #**************************************************************************
 
+def eval_highest_block(state):
+    return max([max(x) for x in state])
+
+def eval_sum_blocks(state):
+    return sum([sum(x) for x in state])
+
+#**************************************************************************
 if __name__ == '__main__':
     Factory.register('ButtonBehavior', cls=ButtonBehavior)
     Game2048App().run()

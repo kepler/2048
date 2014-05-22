@@ -151,14 +151,14 @@ BoxLayout:
                             text: '-'
                             font_size: self.height
                             valign: 'middle'
-                            on_press: app.ai_decrease_tempo() if tempo_controls.opacity == 1. else None
+                            on_press: app.ai_increase_tempo() if tempo_controls.opacity == 1. else None
 
                         TextButton:
                             pos_hint: {'center_x': .5, 'center_y': .5}
                             background_color: 0x77 / 255., 0x6e / 255., 0x65 / 255., 1.
                             text: '+'
                             font_size: self.height
-                            on_press: app.ai_increase_tempo() if tempo_controls.opacity == 1. else None
+                            on_press: app.ai_decrease_tempo() if tempo_controls.opacity == 1. else None
 
 			BoxLayout:
 				orientation: 'vertical'
