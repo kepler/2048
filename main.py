@@ -573,123 +573,93 @@ class Game2048AI:
 
     def next_state(self, current_state, action):
         state = [row[:] for row in current_state] # make a copy
-        for iy in range(len(state)):
-            row = []
-            for ix in range(len(state[iy])):
-                value = state[iy][ix]
-                if value == 0:  # empty position
-                    try:
-                        if action is Actions.up:
-                            pass
-                        elif action is Actions.down:
-                            state[iy][ix], state[iy+1][ix] = state[iy+1][ix], state[iy][ix]  # swap with value above
-                        elif action is Actions.right:
-                            pass
-                        elif action is Actions.left:
-                            state[iy][ix], state[iy][ix+1] = state[iy][ix+1], state[iy][ix]  # swap with value to the right
-                    except IndexError:
-                        pass
-                else:  # position with a number
-                    try:
-                        if action is Actions.up:
-                            above_value = state[ix][iy + 1]  # look at block above
-                            if above_value == 0:
-                                state[iy][ix], state[iy+1][ix] = state[iy+1][ix], state[iy][ix]  # swap with value above
-                            elif value == above_value:
-                                state[iy+1][ix] = state[iy+1][ix] + state[iy][ix] # combine
-                                state[iy][ix] = 0
-                        elif action is Actions.down:
-                            above_value = state[ix][iy + 1]  # look at block above
-                            state[iy][ix], state[iy+1][ix] = state[iy+1][ix], state[iy][ix]  # swap with value above
-
-                        elif action is Actions.right:
-                            right_value = state[ix + 1][iy]  # look at block to the right
-                        elif action is Actions.left:
-                            state[iy][ix], state[iy][ix+1] = state[iy][ix+1], state[iy][ix]  # swap with value to the right
-
-                        if right_value == 0:
-                            available.add(Actions.right)
-                        if value == right_value:
-                            available.add(Actions.right)
-                            available.add(Actions.left)
-                    except IndexError:
-                        pass
-                    try:
-                        if above_value == 0:
-                            available.add(Actions.up)
-                        if value == above_value:
-                            available.add(Actions.up)
-                            available.add(Actions.down)
-                    except IndexError:
-                        pass
-            state.append(row)
+        if action is Actions.up:
+            self.combine_up(state)
+        elif action is Actions.down:
+            self.combine_down(state)
+        elif action is Actions.right:
+            self.combine_right(state)
+        elif action is Actions.left:
+            self.combine_left(state)
         return state
 
-
-    def move_leftright(self, right):
-        r = range(3, -1, -1) if right else range(4)
-        grid = self.grid
-        moved = False
-
-            # combine them
-            self.combine(cubes)
-
-            # update the grid
-            for ix in r:
-                cube = cubes.pop(0) if cubes else None
-                if grid[ix][iy] != cube:
-                    moved = True
-                grid[ix][iy] = cube
-                if not cube:
-                    continue
-                pos = self.index_to_pos(ix, iy)
-                if cube.pos != pos:
-                    cube.move_to(pos)
-
-    def move_topdown(self, top):
-        r = range(3, -1, -1) if top else range(4)
-        grid = self.grid
-        moved = False
-
-        for ix in range(4):
-            # get all the cube for the current line
-            cubes = []
-            for iy in r:
-                cube = grid[ix][iy]
-                if cube:
-                    cubes.append(cube)
+    def combine_down(self, state):
+        for j in range(4):
+            blocks = []
+            for i in range(4):
+                block = state[i][j]
+                if block != 0:
+                    blocks.append(block)
 
             # combine them
-            self.combine(cubes)
+            self.combine(blocks)
 
             # update the grid
-            for iy in r:
-                cube = cubes.pop(0) if cubes else None
-                if grid[ix][iy] != cube:
-                    moved = True
-                grid[ix][iy] = cube
-                if not cube:
-                    continue
-                pos = self.index_to_pos(ix, iy)
-                if cube.pos != pos:
-                    cube.move_to(pos)
+            for i in range(4):
+                block = blocks.pop(0) if blocks else 0
+                state[i][j] = block
 
-    def combine(self, cubes):
-        if len(cubes) <= 1:
-            return cubes
-        index = 0
-        while index < len(cubes) - 1:
-            cube1 = cubes[index]
-            cube2 = cubes[index + 1]
-            if cube1.number == cube2.number:
-                cube1.number *= 2
-                self.score += cube1.number
-                cube2.move_to_and_destroy(cube1.pos)
-                del cubes[index + 1]
+    def combine_up(self, state):
+        for j in range(4):
+            blocks = []
+            for i in range(3,-1,-1):
+                block = state[i][j]
+                if block != 0:
+                    blocks.append(block)
 
-            index += 1
+            # combine them
+            self.combine(blocks)
 
+            # update the grid
+            for i in range(3,-1,-1):
+                block = blocks.pop(0) if blocks else 0
+                state[i][j] = block
 
+    def combine_left(self, state):
+        for i in range(4):
+            blocks = []
+            for j in range(4):
+                block = state[i][j]
+                if block != 0:
+                    blocks.append(block)
+
+            # combine them
+            self.combine(blocks)
+
+            # update the grid
+            for j in range(4):
+                block = blocks.pop(0) if blocks else 0
+                state[i][j] = block
+
+    def combine_right(self, state):
+        for i in range(4):
+            blocks = []
+            for j in range(3,-1,-1):
+                block = state[i][j]
+                if block != 0:
+                    blocks.append(block)
+
+            # combine them
+            self.combine(blocks)
+
+            # update the grid
+            for j in range(3,-1,-1):
+                block = blocks.pop(0) if blocks else 0
+                state[i][j] = block
+
+    def combine(self, blocks):
+        if len(blocks) <= 1:
+            return blocks
+        i = 0
+        while i < len(blocks) - 1:
+            block1 = blocks[i]
+            block2 = blocks[i + 1]
+            if block1 == block2:
+                blocks[i] *= 2
+                #self.score += block1
+                #block2 = 0
+                del blocks[i + 1]
+            i += 1
 
     def available_actions(self):
         return self.get_actions(self.current_state())
@@ -731,25 +701,22 @@ class Game2048AI:
                     pass
         return list(available)
 
-    def choose_action(self):
-        #return choice(self.available_actions) if self.available_actions else None # choose action uniformly at random
-        return self.choose_action_down_left_strategy()
-
-    def choose_action_down_left_strategy(self):
-        actions = self.available_actions
-        if not actions:
-           return None
-        weighted_actions = []
-        if Actions.down in actions:
-            weighted_actions.append((Actions.down, 0.45))
-        if Actions.left in actions:
-            weighted_actions.append((Actions.left, 0.45))
-        if Actions.up in actions:
-            weighted_actions.append((Actions.up, 0.05))
-        if Actions.right in actions:
-            weighted_actions.append((Actions.right, 0.05))
-        action = weighted_choice(weighted_actions)
-        return action
+    def choose_action(self, state):
+        print("Current state:")
+        print(state)
+        max_score = 0
+        max_action = None
+        for action in self.get_actions(state):
+            next_state = self.next_state(state, action)
+            score = self.evaluate(eval_sum_blocks, next_state)
+            if score > max_score:
+                max_score = score
+                max_action = action
+            print("Action: " + action)
+            print("Next state:")
+            print(self.next_state(state, action))
+            print("Score: " + str(score))
+        return max_action
 
     def execute(self, action):
         if action == Actions.up:
@@ -774,21 +741,6 @@ class Game2048AI:
         return True
 
 #**************************************************************************
-# http://stackoverflow.com/a/3679790
-def weighted_choice(choices):
-    # Safety check, you can remove it
-    print(choices)
-    for c,w in choices:
-        assert w >= 0
-    tmp = uniform(0, sum(w for c,w in choices))
-    for choice,weight in choices:
-        if tmp < weight:
-            return choice
-        else:
-            tmp -= weight
-    raise ValueError('Negative values in input')
-
-#**************************************************************************
 
 def eval_highest_block(state):
     return max([max(x) for x in state])
@@ -800,3 +752,5 @@ def eval_sum_blocks(state):
 if __name__ == '__main__':
     Factory.register('ButtonBehavior', cls=ButtonBehavior)
     Game2048App().run()
+    
+
