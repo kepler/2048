@@ -1,8 +1,11 @@
 from functools import partial
 
+chance_of_a_four = .1
+
 __version__ = '1.3.0'
 
 from random import choice, random, randrange, uniform
+from copy import copy
 
 from kivy.app import App
 from kivy.uix.widget import Widget
@@ -265,7 +268,7 @@ class Game2048(Widget):
         empty = list(self.iterate_empty())
         if not empty:
             return
-        value = 2 if random() < .9 else 4
+        value = 4 if random() < chance_of_a_four else 2
         ix, iy = choice(empty)
         self.spawn_number_at(ix, iy, value)
 
@@ -542,52 +545,100 @@ class Actions:
     # up, down, left, right = range(4)
     up, down, left, right = ("UP", "DOWN", "LEFT", "RIGHT")
 
+#----------------
+class State(object):
+    board = None
 
-class Game2048AI:
-    game_app = None
-
-    def __init__(self, game_app):
-        self.game_app = game_app
-
-    @staticmethod
-    def iterate(state):
-        for iy, row in enumerate(state):
-            for ix, value in enumerate(row):
-                yield ix, iy, value
-
-    def grid_at(self, x, y):
-        cube = self.game_app.grid[x][y]
-        if cube:
-            return cube.number
-        else:
-            return 0
-
-    def current_state(self):
-        grid = []
+    def __init__(self, grid):
+        self.board = []
         for iy in range(4):
             row = []
             for ix in range(4):
-                row.append(self.grid_at(ix, iy))
-            grid.append(row)
-        return grid
+                number = 0
+                cube = grid[ix][iy]
+                if cube:
+                    number = cube.number
+                row.append(number)
+            self.board.append(row)
 
-    def next_state(self, current_state, action):
-        state = [row[:] for row in current_state] # make a copy
+    def __copy__(self):
+        # newone = type(self)()
+        # newone.board = [row[:] for row in self.board]
+        # return newone
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.board = [row[:] for row in self.board]
+        # result.__dict__.update(self.__dict__)
+        return result
+
+    # def __iter__(self):
+    #     for x in list.__iter__(self):
+    #         yield self.do_something(x)
+
+    def __iter__(self):
+        for iy, row in enumerate(self.board):
+            for ix, value in enumerate(row):
+                yield ix, iy, value
+
+    def __str__(self):
+        rows_str = [' '.join(['{:^4}'.format(number) for number in row]) for row in self.board]
+        string = '\n'.join(reversed(rows_str))
+        return string
+
+    def value_at(self, x, y):
+        return self.board[y][x]  # y is the row and x, the column
+
+    def set_value(self, x, y, value):
+        self.board[y][x] = value  # y is the row and x, the column
+
+    @staticmethod
+    def iterate_value(state, value):
+        for iy, row in enumerate(state):
+            for ix, val in enumerate(row):
+                if val == value:
+                    yield ix, iy, val
+
+    def next_state(self, action):
+        state = copy(self)  # make a copy
         if action is Actions.up:
-            self.combine_up(state)
+            state.combine_up()
         elif action is Actions.down:
-            self.combine_down(state)
+            state.combine_down()
         elif action is Actions.right:
-            self.combine_right(state)
+            state.combine_right()
         elif action is Actions.left:
-            self.combine_left(state)
+            state.combine_left()
         return state
 
-    def combine_down(self, state):
+    def generate_chance_states(self, state):
+        """Gera os possiveis estados onde um 2 ou um 4 pode aparecer e retorna uma lista de pares (chance, estado).
+        @param state:
+        @type state:
+        @return: A list of tuples (chance, state).
+        @rtype:
+        """
+        # empty = list(self.iterate_value(state, 0))
+        empty = [(x, y) for x, y, value in self if value == 0]  # get empty blocks
+        if not empty:
+            return [(1.0, copy(state))]
+        chance_states = []
+        total_states = float(len(empty)) * 2.0  # Two possibilities for each empty position: a 2 or a 4
+        for x, y in empty:
+            state2 = copy(state)
+            state2.set_value(x, y, 2)
+            chance2 = (1.0 - chance_of_a_four) * 1.0 / total_states
+            chance_states.append((chance2, state2))
+            state4 = copy(state)
+            state4.set_value(x, y, 4)
+            chance4 = (chance_of_a_four) * 1.0 / total_states
+            chance_states.append((chance4, state4))
+        return chance_states
+
+    def combine_down(self):
         for j in range(4):
             blocks = []
             for i in range(4):
-                block = state[i][j]
+                block = self.board[i][j]
                 if block != 0:
                     blocks.append(block)
 
@@ -597,13 +648,13 @@ class Game2048AI:
             # update the grid
             for i in range(4):
                 block = blocks.pop(0) if blocks else 0
-                state[i][j] = block
+                self.board[i][j] = block
 
-    def combine_up(self, state):
+    def combine_up(self):
         for j in range(4):
             blocks = []
             for i in range(3,-1,-1):
-                block = state[i][j]
+                block = self.board[i][j]
                 if block != 0:
                     blocks.append(block)
 
@@ -613,13 +664,13 @@ class Game2048AI:
             # update the grid
             for i in range(3,-1,-1):
                 block = blocks.pop(0) if blocks else 0
-                state[i][j] = block
+                self.board[i][j] = block
 
-    def combine_left(self, state):
+    def combine_left(self):
         for i in range(4):
             blocks = []
             for j in range(4):
-                block = state[i][j]
+                block = self.board[i][j]
                 if block != 0:
                     blocks.append(block)
 
@@ -629,13 +680,13 @@ class Game2048AI:
             # update the grid
             for j in range(4):
                 block = blocks.pop(0) if blocks else 0
-                state[i][j] = block
+                self.board[i][j] = block
 
-    def combine_right(self, state):
+    def combine_right(self):
         for i in range(4):
             blocks = []
             for j in range(3,-1,-1):
-                block = state[i][j]
+                block = self.board[i][j]
                 if block != 0:
                     blocks.append(block)
 
@@ -645,9 +696,10 @@ class Game2048AI:
             # update the grid
             for j in range(3,-1,-1):
                 block = blocks.pop(0) if blocks else 0
-                state[i][j] = block
+                self.board[i][j] = block
 
-    def combine(self, blocks):
+    @staticmethod
+    def combine(blocks):
         if len(blocks) <= 1:
             return blocks
         i = 0
@@ -657,32 +709,28 @@ class Game2048AI:
             if block1 == block2:
                 blocks[i] *= 2
                 #self.score += block1
-                #block2 = 0
                 del blocks[i + 1]
             i += 1
 
-    def available_actions(self):
-        return self.get_actions(self.current_state())
-
-    def get_actions(self, state):
+    def get_actions(self):
         available = set()
-        for ix, iy, value in self.iterate(state):
+        for ix, iy, value in self:
             if len(available) == 4: # all actions already available
                 break
             if value == 0: # empty position
                 try:
-                    if self.grid_at(ix + 1, iy) != 0: # look at right block
+                    if self.value_at(ix + 1, iy) != 0:  # look at right block
                         available.add(Actions.left)
                 except IndexError:
                     pass
                 try:
-                    if self.grid_at(ix, iy + 1) != 0: # look at block above
+                    if self.value_at(ix, iy + 1) != 0:  # look at block above
                         available.add(Actions.down)
                 except IndexError:
                     pass
             else: # position with a number
                 try:
-                    right_value = self.grid_at(ix + 1, iy) # look at right block
+                    right_value = self.value_at(ix + 1, iy)  # look at right block
                     if right_value == 0:
                         available.add(Actions.right)
                     if value == right_value:
@@ -691,7 +739,7 @@ class Game2048AI:
                 except IndexError:
                     pass
                 try:
-                    above_value = self.grid_at(ix, iy + 1) # look at block above
+                    above_value = self.value_at(ix, iy + 1)  # look at block above
                     if above_value == 0:
                         available.add(Actions.up)
                     if value == above_value:
@@ -701,22 +749,58 @@ class Game2048AI:
                     pass
         return list(available)
 
-    def choose_action(self, state):
-        print("Current state:")
-        print(state)
+    def choose_action(self, eval_func):
         max_score = 0
         max_action = None
-        for action in self.get_actions(state):
-            next_state = self.next_state(state, action)
-            score = self.evaluate(eval_sum_blocks, next_state)
+        for action in self.get_actions():
+            # print("Current state:")
+            # print(state)
+            # print("\n----------")
+            next_state = self.next_state(action)
+            score = eval_func(next_state)
             if score > max_score:
                 max_score = score
                 max_action = action
-            print("Action: " + action)
-            print("Next state:")
-            print(self.next_state(state, action))
-            print("Score: " + str(score))
+        #     print("Action: " + action)
+        #     print("Next state:")
+        #     print(state.next_state(action))
+        #     print("Score: " + str(score))
+        #     print("\n----------")
+        # print("MAX Action: " + max_action)
+        # print("Next state:")
+        # print(state.next_state(max_action))
         return max_action
+
+
+    def choose_action42(self, eval_func):
+        max_score = 0.0
+        max_action = None
+        for action in self.get_actions():
+            next_state = self.next_state(action)
+            chance_states = self.generate_chance_states(next_state)
+            total_score = 0.0
+            for chance, state in chance_states:
+                score = eval_func(state)
+                chance_score = score * chance
+                total_score += chance_score
+            if total_score > max_score:
+                max_score = total_score
+                max_action = action
+        return max_action
+
+
+#----------------
+class Game2048AI:
+    game_app = None
+
+    def __init__(self, game_app):
+        self.game_app = game_app
+
+    def current_state(self):
+        return State(self.game_app.grid)
+
+    def available_actions(self):
+        return self.current_state().get_actions()
 
     def execute(self, action):
         if action == Actions.up:
@@ -733,7 +817,7 @@ class Game2048AI:
 
     def make_move(self):
         state = self.current_state()
-        action = self.choose_action(state)
+        action = state.choose_action42(eval_highest_block)
         if not action:
             self.execute(Actions.up) # just to make the game end
             return False
