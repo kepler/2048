@@ -61,10 +61,13 @@ else:
 
 from kivy.uix.popup import Popup
 
+
 class AITempoPopup(Popup):
     pass
 
+
 tempo = .2
+
 
 class ButtonBehavior(object):
     # XXX this is a port of the Kivy 1.8.0 version, the current android version
@@ -517,7 +520,7 @@ class Game2048App(App):
     def ai_keep_playing(self, dt):
         if not self.ai_move():
             self.ai_stop_playing()
-            return False # automatically unschedule callback
+            return False  # automatically unschedule callback
 
     def ai_stop_playing(self):
         self.ai_play_button.state = 'normal'
@@ -537,13 +540,14 @@ class Game2048App(App):
         Clock.unschedule(self.ai_keep_playing)
         Clock.schedule_interval(self.ai_keep_playing, tempo)
 
-    #**************************************************************************
+        #**************************************************************************
 
 
 #**************************************************************************
 class Actions:
     # up, down, left, right = range(4)
     up, down, left, right = ("UP", "DOWN", "LEFT", "RIGHT")
+
 
 #----------------
 class State(object):
@@ -653,7 +657,7 @@ class State(object):
     def combine_up(self):
         for j in range(4):
             blocks = []
-            for i in range(3,-1,-1):
+            for i in range(3, -1, -1):
                 block = self.board[i][j]
                 if block != 0:
                     blocks.append(block)
@@ -662,7 +666,7 @@ class State(object):
             self.combine(blocks)
 
             # update the grid
-            for i in range(3,-1,-1):
+            for i in range(3, -1, -1):
                 block = blocks.pop(0) if blocks else 0
                 self.board[i][j] = block
 
@@ -685,7 +689,7 @@ class State(object):
     def combine_right(self):
         for i in range(4):
             blocks = []
-            for j in range(3,-1,-1):
+            for j in range(3, -1, -1):
                 block = self.board[i][j]
                 if block != 0:
                     blocks.append(block)
@@ -694,7 +698,7 @@ class State(object):
             self.combine(blocks)
 
             # update the grid
-            for j in range(3,-1,-1):
+            for j in range(3, -1, -1):
                 block = blocks.pop(0) if blocks else 0
                 self.board[i][j] = block
 
@@ -715,9 +719,9 @@ class State(object):
     def get_actions(self):
         available = set()
         for ix, iy, value in self:
-            if len(available) == 4: # all actions already available
+            if len(available) == 4:  # all actions already available
                 break
-            if value == 0: # empty position
+            if value == 0:  # empty position
                 try:
                     if self.value_at(ix + 1, iy) != 0:  # look at right block
                         available.add(Actions.left)
@@ -728,7 +732,7 @@ class State(object):
                         available.add(Actions.down)
                 except IndexError:
                     pass
-            else: # position with a number
+            else:  # position with a number
                 try:
                     right_value = self.value_at(ix + 1, iy)  # look at right block
                     if right_value == 0:
@@ -771,22 +775,41 @@ class State(object):
         # print(state.next_state(max_action))
         return max_action
 
-
-    def choose_action42(self, eval_func):
-        max_score = 0.0
-        max_action = None
+    def get_scores_and_actions(self, eval_func, levels_to_go=0):
+        """
+        @param eval_func:
+        @type eval_func:
+        @return: A list of tuples (score, action) for all possible actions.
+        @rtype:
+        """
+        scores_actions = [(0.0, None)]
         for action in self.get_actions():
             next_state = self.next_state(action)
             chance_states = self.generate_chance_states(next_state)
             total_score = 0.0
             for chance, state in chance_states:
-                score = eval_func(state)
+                #-- Expectimax! --#
+                score = 0
+                if levels_to_go == 0:
+                    score = eval_func(state)
+                else:  # recurse!
+                    sub_scores = state.get_scores_and_actions(eval_func, levels_to_go-1)
+                    score, tmp = max(sub_scores)
+                #-----------------#
                 chance_score = score * chance
                 total_score += chance_score
-            if total_score > max_score:
-                max_score = total_score
-                max_action = action
+            scores_actions.append((total_score, action))
+        return scores_actions
+
+    def choose_action42(self, eval_func):
+        max_score, max_action = max(self.get_scores_and_actions(eval_func))
         return max_action
+
+    def deep_choose_action42(self, eval_func, levels_to_go):
+        max_score, max_action = max(self.get_scores_and_actions(eval_func, levels_to_go))
+        return max_action
+        # if levels_to_go == 0:  # so current state (self) is a leaf; evaluate it
+        #     return eval_func(self)
 
 
 #----------------
@@ -799,9 +822,6 @@ class Game2048AI:
     def current_state(self):
         return State(self.game_app.grid)
 
-    def available_actions(self):
-        return self.current_state().get_actions()
-
     def execute(self, action):
         if action == Actions.up:
             self.game_app.move_topdown(True)
@@ -812,25 +832,24 @@ class Game2048AI:
         elif action == Actions.left:
             self.game_app.move_leftright(False)
 
-    def evaluate(self, eval_func, state):
-        return eval_func(state)
-
     def make_move(self):
         state = self.current_state()
-        action = state.choose_action42(eval_highest_block)
+        action = state.deep_choose_action42(eval_highest_block, 2)
         if not action:
-            self.execute(Actions.up) # just to make the game end
+            self.execute(Actions.up)  # just to make the game end
             return False
         self.execute(action)
         return True
 
+
 #**************************************************************************
 
 def eval_highest_block(state):
-    return max([max(x) for x in state])
+    return max([val for x, y, val in state])
+
 
 def eval_sum_blocks(state):
-    return sum([sum(x) for x in state])
+    return sum([val for x, y, val in state])
 
 #**************************************************************************
 if __name__ == '__main__':
