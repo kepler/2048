@@ -1,15 +1,9 @@
-from functools import partial
-
-chance_of_a_four = .1
-
 __version__ = '1.3.0'
 
-from random import choice, random, randrange, uniform
+from random import choice, random
 from copy import copy
-
 from kivy.app import App
 from kivy.uix.widget import Widget
-from kivy.properties import NumericProperty, OptionProperty, ObjectProperty
 from kivy.graphics import Color, BorderImage
 from kivy.clock import Clock
 from kivy.vector import Vector
@@ -20,8 +14,16 @@ from kivy.core.window import Window
 from kivy.utils import platform
 from kivy.factory import Factory
 
+import numpy
+from kivy.properties import NumericProperty, OptionProperty, ObjectProperty
+
+
 platform = platform()
 app = None
+
+tempo = .2
+chance_of_a_four = .1
+cache = dict()
 
 if platform == 'android':
     # Support for Google Play
@@ -55,7 +57,6 @@ if platform == 'android':
 
     class GooglePlayPopup(Popup):
         pass
-
 else:
     achievements = {}
 
@@ -64,9 +65,6 @@ from kivy.uix.popup import Popup
 
 class AITempoPopup(Popup):
     pass
-
-
-tempo = .2
 
 
 class ButtonBehavior(object):
@@ -156,7 +154,7 @@ class Number(Widget):
 
     def move_to_and_destroy(self, pos):
         self.destroy()
-        #anim = Animation(opacity=0., d=.25, t='out_quad')
+        # anim = Animation(opacity=0., d=.25, t='out_quad')
         #anim.bind(on_complete=self.destroy)
         #anim.start(self)
 
@@ -168,7 +166,8 @@ class Number(Widget):
             return
         Animation(pos=pos, d=.1, t='out_quad').start(self)
 
-    def on_number(self, instance, value):
+    @staticmethod
+    def on_number(instance, value):
         if platform == 'android':
             if value in achievements:
                 app.gs_unlock(achievements[value])
@@ -217,7 +216,6 @@ class Game2048(Widget):
             PythonActivity.mActivity.moveTaskToBack(True)
             return True
 
-
     def rebuild_background(self):
         self.canvas.before.clear()
         with self.canvas.before:
@@ -228,7 +226,6 @@ class Game2048(Widget):
             for ix, iy in self.iterate_pos():
                 BorderImage(pos=self.index_to_pos(ix, iy), size=csize,
                             source='data/round.png')
-
 
     def reposition(self, *args):
         self.rebuild_background()
@@ -255,7 +252,8 @@ class Game2048(Widget):
             if not child:
                 yield ix, iy
 
-    def iterate_pos(self):
+    @staticmethod
+    def iterate_pos():
         for ix in range(4):
             for iy in range(4):
                 yield ix, iy
@@ -480,7 +478,8 @@ class Game2048App(App):
             else:
                 self.ask_google_play()
 
-    def ask_google_play(self, *args):
+    @staticmethod
+    def ask_google_play(*args):
         popup = GooglePlayPopup()
         popup.open()
 
@@ -502,10 +501,13 @@ class Game2048App(App):
     def _on_keyboard_settings(self, *args):
         return
 
-    #**************************************************************************
+    # **************************************************************************
     # Executa uma jogada
     def ai_move(self):
         return self.ai_api.make_move()
+        # import cProfile
+        # cProfile.runctx('self.ai_api.make_move()', globals(), locals(), filename="profiling.txt")
+        # return True
 
     # Comeca a jogar continuamente ou, se ja estiver jogando, para de jogar
     def ai_play(self, button):
@@ -543,9 +545,10 @@ class Game2048App(App):
         #**************************************************************************
 
 
-#**************************************************************************
+# **************************************************************************
+# noinspection PyClassHasNoInit
 class Actions:
-    # up, down, left, right = range(4)
+    #up, down, left, right = range(4)
     up, down, left, right = ("UP", "DOWN", "LEFT", "RIGHT")
 
 
@@ -553,12 +556,14 @@ class Actions:
 class State(object):
     board = None
 
+    _empty_number = 0
+
     def __init__(self, grid):
         self.board = []
         for iy in range(4):
             row = []
             for ix in range(4):
-                number = 0
+                number = self._empty_number
                 cube = grid[ix][iy]
                 if cube:
                     number = cube.number
@@ -584,10 +589,26 @@ class State(object):
             for ix, value in enumerate(row):
                 yield ix, iy, value
 
+    def values(self):
+        for row in self.board:
+            for value in row:
+                yield value
+
     def __str__(self):
         rows_str = [' '.join(['{:^4}'.format(number) for number in row]) for row in self.board]
         string = '\n'.join(reversed(rows_str))
         return string
+
+    def __repr__(self):
+        return self.board.__repr__()
+        # sign, det = numpy.linalg.slogdet(self.board)
+        # return float(det)
+
+    def get_empty_positions(self):
+        return [(x, y) for x, y, val in self if val == self._empty_number]
+
+    def get_value_positions(self, value):
+        return [(x, y) for x, y, val in self if val == value]
 
     def value_at(self, x, y):
         return self.board[y][x]  # y is the row and x, the column
@@ -595,12 +616,11 @@ class State(object):
     def set_value(self, x, y, value):
         self.board[y][x] = value  # y is the row and x, the column
 
-    @staticmethod
-    def iterate_value(state, value):
-        for iy, row in enumerate(state):
+    def iterate_value_positions(self, value):
+        for iy, row in enumerate(self.board):
             for ix, val in enumerate(row):
                 if val == value:
-                    yield ix, iy, val
+                    yield ix, iy
 
     def next_state(self, action):
         state = copy(self)  # make a copy
@@ -614,93 +634,87 @@ class State(object):
             state.combine_left()
         return state
 
-    def generate_chance_states(self, state):
-        """Gera os possiveis estados onde um 2 ou um 4 pode aparecer e retorna uma lista de pares (chance, estado).
+    def actions_and_next_states(self):
+        for action in self.get_actions():
+            state = copy(self)  # make a copy
+            if action is Actions.up:
+                state.combine_up()
+            elif action is Actions.down:
+                state.combine_down()
+            elif action is Actions.right:
+                state.combine_right()
+            elif action is Actions.left:
+                state.combine_left()
+            yield (action, state)
+
+    def chance_states(self):
+        """Gera os possiveis estados onde um 2 ou um 4 pode aparecer.
         @param state:
         @type state:
-        @return: A list of tuples (chance, state).
+        @return: A list of states.
         @rtype:
         """
-        # empty = list(self.iterate_value(state, 0))
-        empty = [(x, y) for x, y, value in self if value == 0]  # get empty blocks
-        if not empty:
-            return [(1.0, copy(state))]
-        chance_states = []
-        total_states = float(len(empty)) * 2.0  # Two possibilities for each empty position: a 2 or a 4
-        for x, y in empty:
-            state2 = copy(state)
-            state2.set_value(x, y, 2)
-            chance2 = (1.0 - chance_of_a_four) * 1.0 / total_states
-            chance_states.append((chance2, state2))
-            state4 = copy(state)
-            state4.set_value(x, y, 4)
-            chance4 = (chance_of_a_four) * 1.0 / total_states
-            chance_states.append((chance4, state4))
-        return chance_states
+        for x, y in self.iterate_value_positions(self._empty_number):
+            for number in [2, 4]:
+                state = copy(self)
+                state.set_value(x, y, number)
+                yield state
 
     def combine_down(self):
-        for j in range(4):
+        for x in range(4):
             blocks = []
-            for i in range(4):
-                block = self.board[i][j]
-                if block != 0:
+            for y in range(4):
+                block = self.value_at(x, y)
+                if block != self._empty_number:
                     blocks.append(block)
-
             # combine them
             self.combine(blocks)
-
             # update the grid
-            for i in range(4):
-                block = blocks.pop(0) if blocks else 0
-                self.board[i][j] = block
+            for y in range(4):
+                block = blocks.pop(0) if blocks else self._empty_number
+                self.set_value(x, y, block)
 
     def combine_up(self):
-        for j in range(4):
+        for x in range(4):
             blocks = []
-            for i in range(3, -1, -1):
-                block = self.board[i][j]
-                if block != 0:
+            for y in range(3, -1, -1):
+                block = self.value_at(x, y)
+                if block != self._empty_number:
                     blocks.append(block)
-
             # combine them
             self.combine(blocks)
-
             # update the grid
-            for i in range(3, -1, -1):
-                block = blocks.pop(0) if blocks else 0
-                self.board[i][j] = block
+            for y in range(3, -1, -1):
+                block = blocks.pop(0) if blocks else self._empty_number
+                self.set_value(x, y, block)
 
     def combine_left(self):
-        for i in range(4):
+        for y in range(4):
             blocks = []
-            for j in range(4):
-                block = self.board[i][j]
-                if block != 0:
+            for x in range(4):
+                block = self.value_at(x, y)
+                if block != self._empty_number:
                     blocks.append(block)
-
             # combine them
             self.combine(blocks)
-
             # update the grid
-            for j in range(4):
-                block = blocks.pop(0) if blocks else 0
-                self.board[i][j] = block
+            for x in range(4):
+                block = blocks.pop(0) if blocks else self._empty_number
+                self.set_value(x, y, block)
 
     def combine_right(self):
-        for i in range(4):
+        for y in range(4):
             blocks = []
-            for j in range(3, -1, -1):
-                block = self.board[i][j]
-                if block != 0:
+            for x in range(3, -1, -1):
+                block = self.value_at(x, y)
+                if block != self._empty_number:
                     blocks.append(block)
-
             # combine them
             self.combine(blocks)
-
             # update the grid
-            for j in range(3, -1, -1):
-                block = blocks.pop(0) if blocks else 0
-                self.board[i][j] = block
+            for x in range(3, -1, -1):
+                block = blocks.pop(0) if blocks else self._empty_number
+                self.set_value(x, y, block)
 
     @staticmethod
     def combine(blocks):
@@ -721,21 +735,21 @@ class State(object):
         for ix, iy, value in self:
             if len(available) == 4:  # all actions already available
                 break
-            if value == 0:  # empty position
+            if value == self._empty_number:  # empty position
                 try:
-                    if self.value_at(ix + 1, iy) != 0:  # look at right block
+                    if self.value_at(ix + 1, iy) != self._empty_number:  # look at right block
                         available.add(Actions.left)
                 except IndexError:
                     pass
                 try:
-                    if self.value_at(ix, iy + 1) != 0:  # look at block above
+                    if self.value_at(ix, iy + 1) != self._empty_number:  # look at block above
                         available.add(Actions.down)
                 except IndexError:
                     pass
             else:  # position with a number
                 try:
                     right_value = self.value_at(ix + 1, iy)  # look at right block
-                    if right_value == 0:
+                    if right_value == self._empty_number:
                         available.add(Actions.right)
                     if value == right_value:
                         available.add(Actions.right)
@@ -744,7 +758,7 @@ class State(object):
                     pass
                 try:
                     above_value = self.value_at(ix, iy + 1)  # look at block above
-                    if above_value == 0:
+                    if above_value == self._empty_number:
                         available.add(Actions.up)
                     if value == above_value:
                         available.add(Actions.up)
@@ -753,64 +767,6 @@ class State(object):
                     pass
         return list(available)
 
-    def choose_action(self, eval_func):
-        max_score = 0
-        max_action = None
-        for action in self.get_actions():
-            # print("Current state:")
-            # print(state)
-            # print("\n----------")
-            next_state = self.next_state(action)
-            score = eval_func(next_state)
-            if score > max_score:
-                max_score = score
-                max_action = action
-        #     print("Action: " + action)
-        #     print("Next state:")
-        #     print(state.next_state(action))
-        #     print("Score: " + str(score))
-        #     print("\n----------")
-        # print("MAX Action: " + max_action)
-        # print("Next state:")
-        # print(state.next_state(max_action))
-        return max_action
-
-    def get_scores_and_actions(self, eval_func, levels_to_go=0):
-        """
-        @param eval_func:
-        @type eval_func:
-        @return: A list of tuples (score, action) for all possible actions.
-        @rtype:
-        """
-        scores_actions = [(0.0, None)]
-        for action in self.get_actions():
-            next_state = self.next_state(action)
-            chance_states = self.generate_chance_states(next_state)
-            total_score = 0.0
-            for chance, state in chance_states:
-                #-- Expectimax! --#
-                score = 0
-                if levels_to_go == 0:
-                    score = eval_func(state)
-                else:  # recurse!
-                    sub_scores = state.get_scores_and_actions(eval_func, levels_to_go-1)
-                    score, tmp = max(sub_scores)
-                #-----------------#
-                chance_score = score * chance
-                total_score += chance_score
-            scores_actions.append((total_score, action))
-        return scores_actions
-
-    def choose_action42(self, eval_func):
-        max_score, max_action = max(self.get_scores_and_actions(eval_func))
-        return max_action
-
-    def deep_choose_action42(self, eval_func, levels_to_go):
-        max_score, max_action = max(self.get_scores_and_actions(eval_func, levels_to_go))
-        return max_action
-        # if levels_to_go == 0:  # so current state (self) is a leaf; evaluate it
-        #     return eval_func(self)
-
 
 #----------------
 class Game2048AI:
@@ -818,6 +774,26 @@ class Game2048AI:
 
     def __init__(self, game_app):
         self.game_app = game_app
+
+    def max_score_and_action(self, state, eval_func, levels_to_go):
+        if levels_to_go < 0:
+            return (eval_func(state), None)
+        score_action = (float("-inf"), None)
+        for action, next_state in state.actions_and_next_states():
+            next_score = self.min_score(next_state, eval_func, levels_to_go)
+            score_action = max(score_action, (next_score, action))
+        if score_action[0] == float("-inf"):  # no action available (it's an end game state)
+            return (eval_func(state), None)
+        return score_action
+
+    def min_score(self, state, eval_func, levels_to_go):
+        if levels_to_go < 0:
+            return eval_func(state)
+        score = float("inf")
+        for next_state in state.chance_states():
+            next_score, next_action = self.max_score_and_action(next_state, eval_func, levels_to_go - 1)
+            score = min(score, next_score)
+        return score
 
     def current_state(self):
         return State(self.game_app.grid)
@@ -834,7 +810,17 @@ class Game2048AI:
 
     def make_move(self):
         state = self.current_state()
-        action = state.deep_choose_action42(eval_highest_block, 2)
+        empties = len(state.get_empty_positions())
+        depth = 0
+        if empties >= 10:
+            depth = 0
+        elif empties >= 4:
+            depth = 0
+        elif empties >= 2:
+            depth = 1
+        else:
+            depth = 2
+        score, action = self.max_score_and_action(state, eval_sum_blocks, depth)
         if not action:
             self.execute(Actions.up)  # just to make the game end
             return False
@@ -850,6 +836,7 @@ def eval_highest_block(state):
 
 def eval_sum_blocks(state):
     return sum([val for x, y, val in state])
+
 
 #**************************************************************************
 if __name__ == '__main__':
